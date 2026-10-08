@@ -1,423 +1,264 @@
---==================================================
--- STEAL AN EGG - OBSERVER V5
--- READ ONLY
--- EVENT DRIVEN
--- COMPACT CLIPBOARD OUTPUT
---==================================================
+-- AutoStealTest.lua
+-- Roblox Studio / private beta test
+-- Flow:
+-- Toggle ON
+-- -> Find nearest egg
+-- -> Move to egg
+-- -> Claim/steal egg
+-- -> Move to player's pen
+-- -> Place egg
+-- -> Repeat
 
 local Players = game:GetService("Players")
-local ProximityPromptService = game:GetService("ProximityPromptService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
-local PlayerGui = player:WaitForChild("PlayerGui")
 
-local results = {}
-local seen = {}
+local CONFIG = {
+    Enabled = false,
+    RepeatDelay = 1,
+    MoveHeight = 3,
 
-local MAX_OUTPUT = 8000
-local MAX_EVENTS = 120
-
---==================================================
--- OUTPUT
---==================================================
-
-local function add(text)
-    text = tostring(text)
-
-    local current = table.concat(results, "\n")
-
-    if #current + #text + 1 <= MAX_OUTPUT then
-        table.insert(results, text)
-        print(text)
-    end
-end
-
-local function unique(text)
-    if not seen[text] then
-        seen[text] = true
-        add(text)
-    end
-end
-
-local function clean(text)
-    text = tostring(text or "")
-    text = string.gsub(text, "\n", " ")
-    text = string.gsub(text, "%s+", " ")
-
-    if #text > 180 then
-        text = string.sub(text, 1, 180) .. "..."
-    end
-
-    return text
-end
-
-local function interesting(text)
-    text = string.lower(tostring(text or ""))
-
-    local words = {
-        "egg",
-        "kg",
-        "common",
-        "uncommon",
-        "rare",
-        "epic",
-        "legendary",
-        "mythic",
-        "cosmic",
-        "secret",
-        "eternal",
-        "mutation",
-        "mutated",
-        "value",
-        "worth",
-        "price",
-        "sell",
-        "carry",
-        "steal",
-        "return",
-        "deposit",
-        "place"
-    }
-
-    for _, word in ipairs(words) do
-        if string.find(text, word, 1, true) then
-            return true
-        end
-    end
-
-    return false
-end
-
---==================================================
--- HEADER
---==================================================
-
-add("========================================")
-add("STEAL AN EGG - OBSERVER V5")
-add("PLAYER=" .. player.Name)
-add("READ ONLY")
-add("========================================")
-
---==================================================
--- TARGET UI OBJECTS
---==================================================
-
-local watchedRoots = {
-    "AssetEggData",
-    "AssetHoverData",
-    "BackpackGui",
-    "AreaGui",
-    "AutoSell"
+    EggsFolder = workspace:WaitForChild("Eggs"),
+    PensFolder = workspace:WaitForChild("Pens"),
 }
 
-local watched = {}
-local connections = {}
-
-local function registerObject(obj)
-
-    if watched[obj] then
-        return
-    end
-
-    watched[obj] = true
-
-    if obj:IsA("TextLabel")
-        or obj:IsA("TextButton")
-        or obj:IsA("TextBox") then
-
-        local function capture()
-
-            local text = clean(obj.Text)
-
-            if text ~= "" and interesting(text) then
-
-                unique(
-                    "TEXT|" ..
-                    obj:GetFullName() ..
-                    "|" ..
-                    text
-                )
-            end
-        end
-
-        capture()
-
-        local connection = obj:GetPropertyChangedSignal("Text")
-            :Connect(capture)
-
-        table.insert(connections, connection)
-    end
+local function getCharacter()
+    return player.Character or player.CharacterAdded:Wait()
 end
 
-local function scanRoot(root)
+local function getRoot()
+    local character = getCharacter()
+    return character:FindFirstChild("HumanoidRootPart")
+end
 
+local function findNearestEgg()
+    local root = getRoot()
     if not root then
-        return
+        return nil
     end
 
-    registerObject(root)
+    local nearestEgg = nil
+    local nearestDistance = math.huge
 
-    for _, obj in ipairs(root:GetDescendants()) do
-        registerObject(obj)
-    end
-end
+    for _, egg in ipairs(CONFIG.EggsFolder:GetChildren()) do
+        if egg:IsA("BasePart") or egg:IsA("Model") then
+            local targetPart
 
-for _, rootName in ipairs(watchedRoots) do
-    local root = PlayerGui:FindFirstChild(rootName, true)
+            if egg:IsA("BasePart") then
+                targetPart = egg
+            else
+                targetPart = egg.PrimaryPart
+                    or egg:FindFirstChildWhichIsA("BasePart")
+            end
 
-    if root then
-        add("WATCH|" .. root:GetFullName())
-        scanRoot(root)
-    else
-        add("MISSING|" .. rootName)
-    end
-end
+            if targetPart then
+                local distance = (root.Position - targetPart.Position).Magnitude
 
---==================================================
--- DYNAMIC GUI OBJECTS
---==================================================
-
-local childConnection = PlayerGui.DescendantAdded:Connect(function(obj)
-
-    local fullName = obj:GetFullName()
-    local lowerName = string.lower(fullName)
-
-    for _, rootName in ipairs(watchedRoots) do
-
-        if string.find(
-            lowerName,
-            string.lower(rootName),
-            1,
-            true
-        ) then
-
-            registerObject(obj)
-            break
-        end
-    end
-end)
-
-table.insert(connections, childConnection)
-
---==================================================
--- PROMPT OBSERVER
---==================================================
-
-local promptConnection =
-    ProximityPromptService.PromptShown:Connect(
-        function(prompt)
-
-            local text =
-                tostring(prompt.Name) ..
-                " " ..
-                tostring(prompt.ActionText) ..
-                " " ..
-                tostring(prompt.ObjectText)
-
-            if interesting(text) then
-
-                unique(
-                    "PROMPT|" ..
-                    prompt:GetFullName() ..
-                    "|" ..
-                    tostring(prompt.ActionText) ..
-                    "|" ..
-                    tostring(prompt.ObjectText) ..
-                    "|E=" ..
-                    tostring(prompt.Enabled) ..
-                    "|H=" ..
-                    tostring(prompt.HoldDuration) ..
-                    "|D=" ..
-                    tostring(prompt.MaxActivationDistance)
-                )
+                if distance < nearestDistance then
+                    nearestDistance = distance
+                    nearestEgg = egg
+                end
             end
         end
+    end
+
+    return nearestEgg
+end
+
+local function getObjectPosition(object)
+    if object:IsA("BasePart") then
+        return object.Position
+    end
+
+    if object:IsA("Model") then
+        local part = object.PrimaryPart
+            or object:FindFirstChildWhichIsA("BasePart")
+
+        if part then
+            return part.Position
+        end
+    end
+
+    return nil
+end
+
+local function findPlayerPen()
+    -- Expected:
+    -- workspace.Pens/<PlayerName>
+
+    return CONFIG.PensFolder:FindFirstChild(player.Name)
+end
+
+local function moveTo(position)
+    local character = getCharacter()
+
+    character:PivotTo(
+        CFrame.new(
+            position + Vector3.new(0, CONFIG.MoveHeight, 0)
+        )
     )
 
-table.insert(connections, promptConnection)
+    task.wait(0.25)
+end
 
---==================================================
--- CHARACTER OBSERVER
---==================================================
+local function stealEgg(egg)
+    -- TEST/BETA ACTION
+    --
+    -- Put your game's legitimate server-side
+    -- steal/claim implementation here.
 
-local function observeCharacter(character)
+    if not egg then
+        return false
+    end
 
-    if not character then
+    egg:SetAttribute("CarriedBy", player.UserId)
+
+    print("[AUTO STEAL] Egg claimed:", egg.Name)
+
+    return true
+end
+
+local function placeEgg(egg, pen)
+    -- TEST/BETA ACTION
+    --
+    -- Put your game's legitimate server-side
+    -- placement implementation here.
+
+    if not egg or not pen then
+        return false
+    end
+
+    local penPosition = getObjectPosition(pen)
+
+    if not penPosition then
+        return false
+    end
+
+    local targetPart
+
+    if egg:IsA("BasePart") then
+        targetPart = egg
+    else
+        targetPart = egg.PrimaryPart
+            or egg:FindFirstChildWhichIsA("BasePart")
+    end
+
+    if not targetPart then
+        return false
+    end
+
+    targetPart.CFrame = CFrame.new(penPosition)
+    egg:SetAttribute("CarriedBy", nil)
+
+    print("[AUTO STEAL] Egg placed:", egg.Name)
+
+    return true
+end
+
+local function runCycle()
+    if not CONFIG.Enabled then
         return
     end
 
-    add("CHARACTER|" .. character:GetFullName())
+    -- STEP 1: Find egg
+    local egg = findNearestEgg()
 
-    for _, obj in ipairs(character:GetDescendants()) do
+    if not egg then
+        print("[AUTO STEAL] No egg found.")
+        return
+    end
 
-        if obj:IsA("Tool")
-            or obj:IsA("StringValue")
-            or obj:IsA("NumberValue")
-            or obj:IsA("IntValue")
-            or obj:IsA("BoolValue") then
+    print("[AUTO STEAL] Target:", egg.Name)
 
-            local line =
-                "CHAR|" ..
-                obj:GetFullName()
+    -- STEP 2: Move to egg
+    local eggPosition = getObjectPosition(egg)
 
-            if obj:IsA("StringValue")
-                or obj:IsA("NumberValue")
-                or obj:IsA("IntValue")
-                or obj:IsA("BoolValue") then
+    if not eggPosition then
+        return
+    end
 
-                line =
-                    line ..
-                    "|VALUE=" ..
-                    tostring(obj.Value)
-            end
+    moveTo(eggPosition)
 
-            unique(line)
-        end
+    -- STEP 3: Steal
+    local stolen = stealEgg(egg)
+
+    if not stolen then
+        print("[AUTO STEAL] Steal failed.")
+        return
+    end
+
+    -- STEP 4: Find pen
+    local pen = findPlayerPen()
+
+    if not pen then
+        print("[AUTO STEAL] Player pen not found.")
+        return
+    end
+
+    -- STEP 5: Move to pen
+    local penPosition = getObjectPosition(pen)
+
+    if not penPosition then
+        return
+    end
+
+    moveTo(penPosition)
+
+    -- STEP 6: Place egg
+    local placed = placeEgg(egg, pen)
+
+    if placed then
+        print("[AUTO STEAL] Cycle complete.")
+    else
+        print("[AUTO STEAL] Placement failed.")
     end
 end
 
-observeCharacter(player.Character)
+local function start()
+    if CONFIG.Enabled then
+        return
+    end
 
-local characterConnection =
-    player.CharacterAdded:Connect(observeCharacter)
+    CONFIG.Enabled = true
 
-table.insert(connections, characterConnection)
+    print("[AUTO STEAL] ENABLED")
 
---==================================================
--- COUNTDOWN GUI
---==================================================
-
-local old = PlayerGui:FindFirstChild("EggObserverV5")
-
-if old then
-    old:Destroy()
-end
-
-local gui = Instance.new("ScreenGui")
-gui.Name = "EggObserverV5"
-gui.ResetOnSpawn = false
-gui.Parent = PlayerGui
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 320, 0, 190)
-frame.Position = UDim2.new(0.5, -160, 0.08, 0)
-frame.BackgroundTransparency = 0.08
-frame.Parent = gui
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 12)
-corner.Parent = frame
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 35)
-title.Position = UDim2.new(0, 10, 0, 8)
-title.BackgroundTransparency = 1
-title.Text = "EGG OBSERVER V5"
-title.TextSize = 18
-title.Font = Enum.Font.GothamBold
-title.TextColor3 = Color3.new(1,1,1)
-title.Parent = frame
-
-local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, -20, 0, 55)
-status.Position = UDim2.new(0, 10, 0, 45)
-status.BackgroundTransparency = 1
-status.Text = "Watching egg / hover / backpack data..."
-status.TextSize = 12
-status.Font = Enum.Font.Gotham
-status.TextWrapped = true
-status.TextColor3 = Color3.new(1,1,1)
-status.Parent = frame
-
-local copy = Instance.new("TextButton")
-copy.Size = UDim2.new(0, 215, 0, 45)
-copy.Position = UDim2.new(0.5, -107, 1, -58)
-copy.Text = "COPY ALL RESULTS"
-copy.TextSize = 15
-copy.Font = Enum.Font.GothamBold
-copy.TextColor3 = Color3.new(1,1,1)
-copy.Parent = frame
-
-local copyCorner = Instance.new("UICorner")
-copyCorner.CornerRadius = UDim.new(0, 8)
-copyCorner.Parent = copy
-
---==================================================
--- OBSERVE FOR 15 SECONDS
---==================================================
-
-for remaining = 15, 1, -1 do
-
-    status.Text =
-        "Watching for UI/state changes...\n" ..
-        "Time remaining: " ..
-        tostring(remaining) ..
-        "s"
-
-    task.wait(1)
-end
-
---==================================================
--- STOP
---==================================================
-
-for _, connection in ipairs(connections) do
-
-    pcall(function()
-        connection:Disconnect()
+    task.spawn(function()
+        while CONFIG.Enabled do
+            runCycle()
+            task.wait(CONFIG.RepeatDelay)
+        end
     end)
 end
 
-add("")
-add("========================================")
-add("OBSERVATION COMPLETE")
-add("EVENTS=" .. tostring(#results))
-add("========================================")
+local function stop()
+    CONFIG.Enabled = false
+    print("[AUTO STEAL] DISABLED")
+end
 
-status.Text =
-    "Observation complete.\n" ..
-    "Captured: " ..
-    tostring(#results) ..
-    " records."
+-- Expose controls for your Studio test UI
+_G.AutoSteal = {
+    Start = start,
+    Stop = stop,
 
---==================================================
--- COPY
---==================================================
+    Toggle = function()
+        if CONFIG.Enabled then
+            stop()
+        else
+            start()
+        end
+    end,
 
-copy.Activated:Connect(function()
+    IsEnabled = function()
+        return CONFIG.Enabled
+    end,
+}
 
-    local text = table.concat(results, "\n")
-    local success = false
-
-    if typeof(setclipboard) == "function" then
-
-        success = pcall(function()
-            setclipboard(text)
-        end)
-
-    elseif typeof(toclipboard) == "function" then
-
-        success = pcall(function()
-            toclipboard(text)
-        end)
-    end
-
-    if success then
-
-        copy.Text = "COPIED!"
-        task.wait(1.5)
-        copy.Text = "COPY ALL RESULTS"
-
-    else
-
-        copy.Text = "CLIPBOARD FAILED"
-        task.wait(1.5)
-        copy.Text = "COPY ALL RESULTS"
-
-    end
-end)
-
-print("========================================")
-print("V5 COMPLETE")
-print("Tap COPY ALL RESULTS")
-print("========================================")
+print("================================")
+print("AUTO STEAL TEST LOADED")
+print("Use:")
+print("_G.AutoSteal.Toggle()")
+print("_G.AutoSteal.Start()")
+print("_G.AutoSteal.Stop()")
+print("================================")
