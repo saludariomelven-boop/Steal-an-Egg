@@ -1,61 +1,78 @@
 --==================================================
--- STEAL AN EGG - DISCOVERY SCANNER V3
--- READ ONLY / MOBILE
--- COMPACT SINGLE-CLIPBOARD OUTPUT
+-- STEAL AN EGG - TARGETED DISCOVERY V4
+-- READ ONLY
 --==================================================
 
 local Players = game:GetService("Players")
-local CollectionService = game:GetService("CollectionService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local player = Players.LocalPlayer
+local PlayerGui = player:WaitForChild("PlayerGui")
+
 local results = {}
 local seen = {}
-
 local MAX_OUTPUT = 8500
 
 local function add(text)
     text = tostring(text)
 
-    if #table.concat(results, "\n") + #text + 1 <= MAX_OUTPUT then
+    local current = table.concat(results, "\n")
+
+    if #current + #text + 1 <= MAX_OUTPUT then
         table.insert(results, text)
         print(text)
     end
 end
 
-local function addUnique(text)
+local function unique(text)
     if not seen[text] then
         seen[text] = true
         add(text)
     end
 end
 
-local function lower(v)
-    return string.lower(tostring(v or ""))
+local function clean(text)
+    text = tostring(text or "")
+    text = string.gsub(text, "\n", " ")
+    text = string.gsub(text, "%s+", " ")
+
+    if #text > 220 then
+        text = string.sub(text, 1, 220) .. "..."
+    end
+
+    return text
 end
 
-local function interesting(text)
-    text = lower(text)
+local function relevantText(text)
+    text = string.lower(tostring(text or ""))
 
     local words = {
         "egg",
+        "kg",
         "rarity",
+        "common",
+        "uncommon",
         "rare",
+        "epic",
+        "legendary",
+        "mythic",
+        "cosmic",
+        "secret",
+        "eternal",
         "mutation",
-        "mutated",
-        "value",
-        "worth",
-        "price",
-        "size",
+        "stolen",
+        "stole",
         "steal",
         "carry",
-        "deposit",
+        "run",
+        "sell",
         "return",
+        "deposit",
         "place",
-        "base",
-        "plot",
-        "pen",
-        "pet"
+        "worth",
+        "price",
+        "value",
+        "$"
     }
 
     for _, word in ipairs(words) do
@@ -67,106 +84,23 @@ local function interesting(text)
     return false
 end
 
-local function metadata(obj)
-    local pieces = {}
+--==================================================
+-- HEADER
+--==================================================
 
-    for name, value in pairs(obj:GetAttributes()) do
-        if interesting(name) or interesting(value) then
-            table.insert(
-                pieces,
-                "A:" .. name .. "=" .. tostring(value)
-            )
-        end
-    end
-
-    for _, child in ipairs(obj:GetChildren()) do
-        if child:IsA("NumberValue")
-            or child:IsA("IntValue")
-            or child:IsA("StringValue")
-            or child:IsA("BoolValue") then
-
-            if interesting(child.Name) or interesting(child.Value) then
-                table.insert(
-                    pieces,
-                    "V:" .. child.Name .. "=" .. tostring(child.Value)
-                )
-            end
-        end
-    end
-
-    return table.concat(pieces, " | ")
-end
-
-add("STEAL AN EGG DISCOVERY V3")
+add("========================================")
+add("STEAL AN EGG - TARGETED DISCOVERY V4")
 add("PLAYER=" .. player.Name)
+add("READ ONLY")
+add("========================================")
 
 --==================================================
--- ACTIVE PROMPTS
+-- TARGETED UI SCAN
 --==================================================
 
-add("")
-add("[PROMPTS]")
+local function scanGui(root, label)
 
-local promptCount = 0
-
-for _, prompt in ipairs(workspace:GetDescendants()) do
-    if prompt:IsA("ProximityPrompt") then
-
-        local text =
-            tostring(prompt.Name) .. " " ..
-            tostring(prompt.ActionText) .. " " ..
-            tostring(prompt.ObjectText)
-
-        if prompt.Enabled or interesting(text) then
-
-            if interesting(text) then
-                promptCount += 1
-
-                add(
-                    "P" ..
-                    promptCount ..
-                    "|" ..
-                    prompt:GetFullName() ..
-                    "|" ..
-                    tostring(prompt.ActionText) ..
-                    "|" ..
-                    tostring(prompt.ObjectText) ..
-                    "|E=" ..
-                    tostring(prompt.Enabled) ..
-                    "|H=" ..
-                    tostring(prompt.HoldDuration) ..
-                    "|D=" ..
-                    tostring(prompt.MaxActivationDistance)
-                )
-
-                local meta = metadata(prompt)
-
-                if meta ~= "" then
-                    add("M|" .. meta)
-                end
-
-                local parentMeta = metadata(prompt.Parent)
-
-                if parentMeta ~= "" then
-                    add("PM|" .. parentMeta)
-                end
-            end
-        end
-    end
-end
-
-add("PROMPTS=" .. promptCount)
-
---==================================================
--- CURRENTLY VISIBLE UI
---==================================================
-
-add("")
-add("[UI]")
-
-local uiCount = 0
-
-local function scanUI(root)
+    local count = 0
 
     for _, obj in ipairs(root:GetDescendants()) do
 
@@ -174,245 +108,302 @@ local function scanUI(root)
             or obj:IsA("TextButton")
             or obj:IsA("TextBox") then
 
-            local text = tostring(obj.Text or "")
+            local text = clean(obj.Text)
 
-            if text ~= "" and interesting(text) then
+            if text ~= "" and relevantText(text) then
 
-                local cleaned = string.gsub(text, "\n", " ")
-
-                if #cleaned > 180 then
-                    cleaned = string.sub(cleaned, 1, 180)
-                end
-
-                addUnique("UI|" .. obj:GetFullName() .. "|" .. cleaned)
-
-                uiCount += 1
-
-                if uiCount >= 80 then
-                    return
-                end
-            end
-        end
-    end
-end
-
-scanUI(player:WaitForChild("PlayerGui"))
-
---==================================================
--- TAGS
---==================================================
-
-add("")
-add("[TAGS]")
-
-local tagCount = 0
-
-for _, tag in ipairs(CollectionService:GetAllTags()) do
-
-    if interesting(tag) then
-
-        local tagged = CollectionService:GetTagged(tag)
-
-        addUnique(
-            "TAG|" ..
-            tag ..
-            "|COUNT=" ..
-            tostring(#tagged)
-        )
-
-        local shown = 0
-
-        for _, instance in ipairs(tagged) do
-
-            if shown < 8 then
-                addUnique(
-                    "TAGOBJ|" ..
-                    tag ..
+                unique(
+                    label ..
                     "|" ..
-                    instance:GetFullName()
+                    obj:GetFullName() ..
+                    "|" ..
+                    text
                 )
 
-                shown += 1
+                count += 1
+
+                if count >= 100 then
+                    break
+                end
             end
         end
-
-        tagCount += 1
     end
+
+    return count
 end
 
-add("TAGS=" .. tagCount)
+add("")
+add("[ASSET EGG DATA]")
+
+local assetEggData = PlayerGui:FindFirstChild("AssetEggData", true)
+
+if assetEggData then
+
+    add("FOUND=" .. assetEggData:GetFullName())
+
+    local count = scanGui(
+        assetEggData,
+        "ASSET"
+    )
+
+    add("ASSET_TEXT_MATCHES=" .. count)
+
+else
+    add("NOT_FOUND")
+end
+
+add("")
+add("[BACKPACK]")
+
+local backpackGui = PlayerGui:FindFirstChild("BackpackGui", true)
+
+if backpackGui then
+
+    add("FOUND=" .. backpackGui:GetFullName())
+
+    local count = scanGui(
+        backpackGui,
+        "BACKPACK"
+    )
+
+    add("BACKPACK_TEXT_MATCHES=" .. count)
+
+else
+    add("NOT_FOUND")
+end
 
 --==================================================
--- REPLICATED OBJECT NAMES
+-- ALL PLAYER UI RELEVANT TEXT
 --==================================================
 
 add("")
-add("[REPLICATED]")
+add("[ALL RELEVANT UI]")
 
-local replicated = game:GetService("ReplicatedStorage")
-local remoteCount = 0
+local totalUI = 0
 
-for _, obj in ipairs(replicated:GetDescendants()) do
+for _, obj in ipairs(PlayerGui:GetDescendants()) do
 
-    if obj:IsA("RemoteEvent")
-        or obj:IsA("RemoteFunction")
-        or obj:IsA("ModuleScript") then
+    if obj:IsA("TextLabel")
+        or obj:IsA("TextButton")
+        or obj:IsA("TextBox") then
 
-        if interesting(obj.Name) then
+        local text = clean(obj.Text)
 
-            addUnique(
-                "R|" ..
-                obj.ClassName ..
+        if text ~= "" and relevantText(text) then
+
+            unique(
+                "UI|" ..
+                obj:GetFullName() ..
                 "|" ..
-                obj:GetFullName()
+                text
             )
 
-            remoteCount += 1
+            totalUI += 1
 
-            if remoteCount >= 80 then
+            if totalUI >= 150 then
                 break
             end
         end
     end
 end
 
-add("REPLICATED_MATCHES=" .. remoteCount)
+add("UI_MATCHES=" .. totalUI)
 
 --==================================================
--- WORLD OBJECTS WITH RELEVANT METADATA
---==================================================
-
-add("")
-add("[WORLD-META]")
-
-local worldCount = 0
-
-for _, obj in ipairs(workspace:GetDescendants()) do
-
-    local meta = metadata(obj)
-
-    if meta ~= "" then
-
-        addUnique(
-            "W|" ..
-            obj:GetFullName() ..
-            "|" ..
-            meta
-        )
-
-        worldCount += 1
-
-        if worldCount >= 70 then
-            break
-        end
-    end
-end
-
-add("WORLD_META=" .. worldCount)
-
---==================================================
--- PLAYER METADATA
+-- PROMPTS RELATED TO SELL / RETURN / CARRY
 --==================================================
 
 add("")
-add("[PLAYER-META]")
+add("[SELL / RETURN PROMPTS]")
 
-local playerMetaCount = 0
+local promptCount = 0
 
-local function scanPlayerMeta(root)
+for _, prompt in ipairs(workspace:GetDescendants()) do
 
-    local meta = metadata(root)
+    if prompt:IsA("ProximityPrompt") then
 
-    if meta ~= "" then
-        addUnique(
-            "P-META|" ..
-            root:GetFullName() ..
-            "|" ..
-            meta
-        )
-
-        playerMetaCount += 1
-    end
-
-    for _, child in ipairs(root:GetChildren()) do
-
-        if playerMetaCount >= 40 then
-            break
-        end
-
-        local childMeta = metadata(child)
-
-        if childMeta ~= "" then
-            addUnique(
-                "P-META|" ..
-                child:GetFullName() ..
-                "|" ..
-                childMeta
-            )
-
-            playerMetaCount += 1
-        end
-    end
-end
-
-scanPlayerMeta(player)
-
---==================================================
--- PROMPTS THAT BECOME VISIBLE
---==================================================
-
-local shownConnections = 0
-
-local function onPromptShown(prompt)
-
-    if prompt and prompt:IsA("ProximityPrompt") then
-
-        local text =
-            tostring(prompt.Name) .. " " ..
-            tostring(prompt.ActionText) .. " " ..
+        local combined =
+            tostring(prompt.Name) ..
+            " " ..
+            tostring(prompt.ActionText) ..
+            " " ..
             tostring(prompt.ObjectText)
 
-        if interesting(text) then
+        if relevantText(combined) then
 
-            addUnique(
-                "SHOWN|" ..
-                prompt:GetFullName() ..
-                "|" ..
-                tostring(prompt.ActionText) ..
-                "|" ..
-                tostring(prompt.ObjectText) ..
-                "|H=" ..
-                tostring(prompt.HoldDuration) ..
-                "|D=" ..
-                tostring(prompt.MaxActivationDistance)
-            )
+            local lowerCombined = string.lower(combined)
 
-            shownConnections += 1
+            if string.find(lowerCombined, "sell", 1, true)
+                or string.find(lowerCombined, "return", 1, true)
+                or string.find(lowerCombined, "deposit", 1, true)
+                or string.find(lowerCombined, "place", 1, true)
+                or string.find(lowerCombined, "carry", 1, true)
+                or string.find(lowerCombined, "steal", 1, true) then
+
+                unique(
+                    "PROMPT|" ..
+                    prompt:GetFullName() ..
+                    "|" ..
+                    tostring(prompt.ActionText) ..
+                    "|" ..
+                    tostring(prompt.ObjectText) ..
+                    "|Enabled=" ..
+                    tostring(prompt.Enabled) ..
+                    "|Hold=" ..
+                    tostring(prompt.HoldDuration) ..
+                    "|Distance=" ..
+                    tostring(prompt.MaxActivationDistance)
+                )
+
+                promptCount += 1
+
+                if promptCount >= 120 then
+                    break
+                end
+            end
         end
     end
 end
 
-ProximityPromptService.PromptShown:Connect(onPromptShown)
+add("RELATED_PROMPTS=" .. promptCount)
+
+--==================================================
+-- CURRENT CHARACTER STATE
+--==================================================
+
+add("")
+add("[CHARACTER]")
+
+local character = player.Character
+
+if character then
+
+    add("CHARACTER=" .. character:GetFullName())
+
+    for _, obj in ipairs(character:GetDescendants()) do
+
+        if obj:IsA("Tool")
+            or obj:IsA("StringValue")
+            or obj:IsA("NumberValue")
+            or obj:IsA("IntValue")
+            or obj:IsA("BoolValue") then
+
+            add(
+                "CHAR|" ..
+                obj:GetFullName() ..
+                "|" ..
+                obj.ClassName
+            )
+
+            if obj:IsA("StringValue")
+                or obj:IsA("NumberValue")
+                or obj:IsA("IntValue")
+                or obj:IsA("BoolValue") then
+
+                add(
+                    "VALUE=" ..
+                    tostring(obj.Value)
+                )
+            end
+        end
+    end
+
+else
+    add("CHARACTER_NOT_FOUND")
+end
+
+--==================================================
+-- PROMPT VISIBILITY MONITOR
+--==================================================
+
+add("")
+add("[LIVE PROMPT MONITOR]")
+add("Move close to an egg or the sell area now.")
+
+local monitoring = true
+local monitorCount = 0
+
+local connection
+
+connection = ProximityPromptService.PromptShown:Connect(function(prompt)
+
+    if not monitoring then
+        return
+    end
+
+    local combined =
+        tostring(prompt.Name) ..
+        " " ..
+        tostring(prompt.ActionText) ..
+        " " ..
+        tostring(prompt.ObjectText)
+
+    if relevantText(combined) then
+
+        unique(
+            "SHOWN|" ..
+            prompt:GetFullName() ..
+            "|" ..
+            tostring(prompt.ActionText) ..
+            "|" ..
+            tostring(prompt.ObjectText) ..
+            "|Enabled=" ..
+            tostring(prompt.Enabled) ..
+            "|Hold=" ..
+            tostring(prompt.HoldDuration) ..
+            "|Distance=" ..
+            tostring(prompt.MaxActivationDistance)
+        )
+
+        monitorCount += 1
+    end
+end)
+
+--==================================================
+-- WAIT
+--==================================================
+
+task.wait(10)
+
+monitoring = false
+
+if connection then
+    connection:Disconnect()
+end
+
+add("")
+add("LIVE_PROMPTS_CAPTURED=" .. monitorCount)
+
+--==================================================
+-- COMPLETE
+--==================================================
+
+add("")
+add("========================================")
+add("SCAN COMPLETE")
+add("========================================")
+
+local finalText = table.concat(results, "\n")
+
+add("OUTPUT_CHARS=" .. tostring(#finalText))
 
 --==================================================
 -- COPY GUI
 --==================================================
 
-local guiParent = player:WaitForChild("PlayerGui")
-
-local old = guiParent:FindFirstChild("EggDiscoveryV3")
+local old = PlayerGui:FindFirstChild("EggDiscoveryV4")
 
 if old then
     old:Destroy()
 end
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "EggDiscoveryV3"
+gui.Name = "EggDiscoveryV4"
 gui.ResetOnSpawn = false
-gui.Parent = guiParent
+gui.Parent = PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 320, 0, 170)
+frame.Size = UDim2.new(0, 320, 0, 180)
 frame.Position = UDim2.new(0.5, -160, 0.08, 0)
 frame.BackgroundTransparency = 0.08
 frame.Parent = gui
@@ -422,22 +413,22 @@ corner.CornerRadius = UDim.new(0, 12)
 corner.Parent = frame
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 35)
+title.Size = UDim2.new(1, -20, 0, 36)
 title.Position = UDim2.new(0, 10, 0, 8)
 title.BackgroundTransparency = 1
-title.Text = "EGG DISCOVERY V3"
+title.Text = "DISCOVERY V4"
 title.TextSize = 18
 title.Font = Enum.Font.GothamBold
 title.TextColor3 = Color3.new(1,1,1)
 title.Parent = frame
 
 local info = Instance.new("TextLabel")
-info.Size = UDim2.new(1, -20, 0, 42)
-info.Position = UDim2.new(0, 10, 0, 45)
+info.Size = UDim2.new(1, -20, 0, 48)
+info.Position = UDim2.new(0, 10, 0, 48)
 info.BackgroundTransparency = 1
 info.Text =
-    "Compact scan complete\n" ..
-    "Output: " .. tostring(#table.concat(results, "\n")) .. " chars"
+    "Targeted scan complete.\n" ..
+    "Move around the egg/sell area for 10 seconds."
 info.TextSize = 12
 info.Font = Enum.Font.Gotham
 info.TextWrapped = true
@@ -445,8 +436,8 @@ info.TextColor3 = Color3.new(1,1,1)
 info.Parent = frame
 
 local copy = Instance.new("TextButton")
-copy.Size = UDim2.new(0, 210, 0, 45)
-copy.Position = UDim2.new(0.5, -105, 1, -58)
+copy.Size = UDim2.new(0, 215, 0, 45)
+copy.Position = UDim2.new(0.5, -107, 1, -57)
 copy.Text = "COPY ALL RESULTS"
 copy.TextSize = 15
 copy.Font = Enum.Font.GothamBold
@@ -459,24 +450,24 @@ copyCorner.Parent = copy
 
 copy.Activated:Connect(function()
 
-    local finalText = table.concat(results, "\n")
+    local text = table.concat(results, "\n")
     local success = false
 
     if typeof(setclipboard) == "function" then
 
         success = pcall(function()
-            setclipboard(finalText)
+            setclipboard(text)
         end)
 
     elseif typeof(toclipboard) == "function" then
 
         success = pcall(function()
-            toclipboard(finalText)
+            toclipboard(text)
         end)
     end
 
     if success then
-        copy.Text = "COPIED ALL!"
+        copy.Text = "COPIED!"
         task.wait(1.5)
         copy.Text = "COPY ALL RESULTS"
     else
@@ -485,7 +476,3 @@ copy.Activated:Connect(function()
         copy.Text = "COPY ALL RESULTS"
     end
 end)
-
-add("")
-add("OUTPUT_CHARS=" .. tostring(#table.concat(results, "\n")))
-add("READY=YES")
