@@ -1,53 +1,121 @@
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
+--==================================================
+-- STEAL AN EGG - FORENSIC SCANNER V2
+-- READ ONLY
+--==================================================
 
+local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
+
+local player = Players.LocalPlayer
 local results = {}
 
-local function valueString(v)
-    if typeof(v) == "Instance" then
-        return v:GetFullName()
-    end
-    return tostring(v)
-end
-
 local function add(text)
-    table.insert(results, text)
+    table.insert(results, tostring(text))
     print(text)
 end
 
-local function dumpObject(obj)
-    add("========================================")
-    add("OBJECT: " .. obj:GetFullName())
-    add("CLASS: " .. obj.ClassName)
-
-    add("--- ATTRIBUTES ---")
-
-    for name, value in pairs(obj:GetAttributes()) do
-        add(name .. " = " .. valueString(value))
+local function safeValue(v)
+    if typeof(v) == "string" then
+        return v
     end
 
-    add("--- VALUES ---")
+    if typeof(v) == "Instance" then
+        return v:GetFullName()
+    end
 
-    for _, child in ipairs(obj:GetDescendants()) do
+    return tostring(v)
+end
+
+local function dumpMetadata(obj, indent)
+    indent = indent or ""
+
+    local attrs = obj:GetAttributes()
+
+    for name, value in pairs(attrs) do
+        add(
+            indent ..
+            "ATTRIBUTE " ..
+            name ..
+            " = " ..
+            safeValue(value)
+        )
+    end
+
+    local tags = obj:GetTags()
+
+    if #tags > 0 then
+        add(
+            indent ..
+            "TAGS = " ..
+            table.concat(tags, ", ")
+        )
+    end
+
+    for _, child in ipairs(obj:GetChildren()) do
+
         if child:IsA("NumberValue")
             or child:IsA("IntValue")
             or child:IsA("StringValue")
             or child:IsA("BoolValue") then
 
             add(
+                indent ..
+                "VALUE " ..
                 child.ClassName ..
                 " " ..
-                child:GetFullName() ..
+                child.Name ..
                 " = " ..
-                valueString(child.Value)
+                safeValue(child.Value)
             )
         end
     end
 end
 
-add("========== STEAL AN EGG FORENSIC SCAN ==========")
+local function looksInteresting(name)
 
-local count = 0
+    name = string.lower(name)
+
+    local words = {
+        "egg",
+        "steal",
+        "carry",
+        "deposit",
+        "place",
+        "return",
+        "drop",
+        "pet",
+        "rarity",
+        "mutation",
+        "worth",
+        "value",
+        "price",
+        "base",
+        "plot",
+        "pen"
+    }
+
+    for _, word in ipairs(words) do
+        if string.find(name, word, 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+add("========================================")
+add("STEAL AN EGG FORENSIC SCAN V2")
+add("READ ONLY")
+add("========================================")
+
+--==================================================
+-- 1. ACTIVE STEAL PROMPTS
+--==================================================
+
+add("")
+add("========== ACTIVE STEAL PROMPTS ==========")
+
+local activeCount = 0
 
 for _, obj in ipairs(workspace:GetDescendants()) do
 
@@ -56,58 +124,190 @@ for _, obj in ipairs(workspace:GetDescendants()) do
         local action = string.lower(obj.ActionText or "")
         local objectText = string.lower(obj.ObjectText or "")
 
-        if obj.Name == "CarryAreaEgg"
-            or (action == "steal" and string.find(objectText, "egg", 1, true)) then
+        if obj.Enabled
+            and (
+                obj.Name == "CarryAreaEgg"
+                or (
+                    action == "steal"
+                    and string.find(objectText, "egg", 1, true)
+                )
+            ) then
 
-            count += 1
+            activeCount += 1
 
             add("")
-            add("EGG #" .. count)
+            add("ACTIVE PROMPT #" .. activeCount)
+            add("PATH: " .. obj:GetFullName())
+            add("PARENT: " .. obj.Parent:GetFullName())
+            add("ACTION: " .. obj.ActionText)
+            add("OBJECT: " .. obj.ObjectText)
+            add("HOLD: " .. tostring(obj.HoldDuration))
+            add("DISTANCE: " .. tostring(obj.MaxActivationDistance))
 
-            add("Prompt: " .. obj:GetFullName())
-            add("ActionText: " .. obj.ActionText)
-            add("ObjectText: " .. obj.ObjectText)
-            add("HoldDuration: " .. tostring(obj.HoldDuration))
-            add("MaxActivationDistance: " .. tostring(obj.MaxActivationDistance))
-            add("Enabled: " .. tostring(obj.Enabled))
+            dumpMetadata(obj, "  ")
+            dumpMetadata(obj.Parent, "  ")
+        end
+    end
+end
 
-            dumpObject(obj)
+add("")
+add("ACTIVE STEAL PROMPTS FOUND: " .. activeCount)
 
-            local p = obj.Parent
+--==================================================
+-- 2. EGG-LIKE OBJECTS IN WORKSPACE
+--==================================================
 
-            for i = 1, 5 do
+add("")
+add("========== WORKSPACE EGG OBJECTS ==========")
 
-                if not p then
-                    break
-                end
+local eggCount = 0
 
-                add(
-                    "ANCESTOR " ..
-                    i ..
-                    ": " ..
-                    p:GetFullName() ..
-                    " [" ..
-                    p.ClassName ..
-                    "]"
-                )
+for _, obj in ipairs(workspace:GetDescendants()) do
 
-                for name, value in pairs(p:GetAttributes()) do
-                    add(
-                        "  ATTRIBUTE: " ..
-                        name ..
-                        " = " ..
-                        valueString(value)
-                    )
-                end
+    if looksInteresting(obj.Name) then
 
-                p = p.Parent
+        if obj:IsA("Model")
+            or obj:IsA("Folder")
+            or obj:IsA("BasePart")
+            or obj:IsA("Attachment") then
+
+            eggCount += 1
+
+            if eggCount <= 150 then
+
+                add("")
+                add("OBJECT #" .. eggCount)
+                add("NAME: " .. obj.Name)
+                add("CLASS: " .. obj.ClassName)
+                add("PATH: " .. obj:GetFullName())
+
+                dumpMetadata(obj, "  ")
             end
         end
     end
 end
 
 add("")
-add("========== TOTAL EGGS: " .. count .. " ==========")
+add("INTERESTING WORKSPACE OBJECTS: " .. eggCount)
+
+--==================================================
+-- 3. REPLICATED STORAGE
+--==================================================
+
+add("")
+add("========== REPLICATED STORAGE ==========")
+
+local replicated = game:GetService("ReplicatedStorage")
+
+local repCount = 0
+
+for _, obj in ipairs(replicated:GetDescendants()) do
+
+    local interesting =
+        looksInteresting(obj.Name)
+        or obj:IsA("RemoteEvent")
+        or obj:IsA("RemoteFunction")
+
+    if interesting then
+
+        repCount += 1
+
+        if repCount <= 200 then
+
+            add("")
+            add("REPLICATED #" .. repCount)
+            add("NAME: " .. obj.Name)
+            add("CLASS: " .. obj.ClassName)
+            add("PATH: " .. obj:GetFullName())
+
+            dumpMetadata(obj, "  ")
+        end
+    end
+end
+
+add("")
+add("REPLICATED INTERESTING OBJECTS: " .. repCount)
+
+--==================================================
+-- 4. LOCAL PLAYER
+--==================================================
+
+add("")
+add("========== LOCAL PLAYER DATA ==========")
+
+local playerCount = 0
+
+for _, obj in ipairs(player:GetDescendants()) do
+
+    if looksInteresting(obj.Name) then
+
+        playerCount += 1
+
+        if playerCount <= 100 then
+
+            add("")
+            add("PLAYER OBJECT #" .. playerCount)
+            add("NAME: " .. obj.Name)
+            add("CLASS: " .. obj.ClassName)
+            add("PATH: " .. obj:GetFullName())
+
+            dumpMetadata(obj, "  ")
+        end
+    end
+end
+
+add("")
+add("PLAYER INTERESTING OBJECTS: " .. playerCount)
+
+--==================================================
+-- 5. COLLECTION TAGS
+--==================================================
+
+add("")
+add("========== COLLECTION TAGS ==========")
+
+local allTags = CollectionService:GetAllTags()
+
+add("TOTAL TAGS: " .. tostring(#allTags))
+
+for _, tag in ipairs(allTags) do
+
+    local lower = string.lower(tag)
+
+    if looksInteresting(lower) then
+
+        add("")
+        add("TAG: " .. tag)
+
+        local tagged = CollectionService:GetTagged(tag)
+
+        add("INSTANCES: " .. tostring(#tagged))
+
+        for i, instance in ipairs(tagged) do
+
+            if i <= 50 then
+                add(
+                    "  " ..
+                    tostring(instance:GetFullName()) ..
+                    " [" ..
+                    instance.ClassName ..
+                    "]"
+                )
+            end
+        end
+    end
+end
+
+--==================================================
+-- COMPLETE
+--==================================================
+
+add("")
+add("========================================")
+add("SCAN COMPLETE")
+add("========================================")
+
+print("Results stored:", #results)
 
 --==================================================
 -- COPY GUI
@@ -115,19 +315,20 @@ add("========== TOTAL EGGS: " .. count .. " ==========")
 
 local PlayerGui = player:WaitForChild("PlayerGui")
 
-local old = PlayerGui:FindFirstChild("EggScannerCopy")
+local old = PlayerGui:FindFirstChild("EggForensicV2")
+
 if old then
     old:Destroy()
 end
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "EggScannerCopy"
+gui.Name = "EggForensicV2"
 gui.ResetOnSpawn = false
 gui.Parent = PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 125)
-frame.Position = UDim2.new(0.5, -150, 0.12, 0)
+frame.Size = UDim2.new(0, 310, 0, 145)
+frame.Position = UDim2.new(0.5, -155, 0.1, 0)
 frame.BackgroundTransparency = 0.1
 frame.Parent = gui
 
@@ -139,64 +340,60 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -20, 0, 35)
 title.Position = UDim2.new(0, 10, 0, 8)
 title.BackgroundTransparency = 1
-title.Text = "EGG FORENSIC SCANNER"
-title.TextSize = 17
+title.Text = "STEAL AN EGG — FORENSIC V2"
+title.TextSize = 16
 title.Font = Enum.Font.GothamBold
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Parent = frame
 
 local info = Instance.new("TextLabel")
 info.Size = UDim2.new(1, -20, 0, 25)
-info.Position = UDim2.new(0, 10, 0, 43)
+info.Position = UDim2.new(0, 10, 0, 42)
 info.BackgroundTransparency = 1
-info.Text = "Found " .. count .. " egg prompts"
-info.TextSize = 13
+info.Text = "Scan complete — copy the results"
+info.TextSize = 12
 info.Font = Enum.Font.Gotham
 info.TextColor3 = Color3.new(1, 1, 1)
 info.Parent = frame
 
-local copyButton = Instance.new("TextButton")
-copyButton.Size = UDim2.new(0, 180, 0, 40)
-copyButton.Position = UDim2.new(0.5, -90, 1, -48)
-copyButton.Text = "COPY RESULTS"
-copyButton.TextSize = 15
-copyButton.Font = Enum.Font.GothamBold
-copyButton.TextColor3 = Color3.new(1, 1, 1)
-copyButton.Parent = frame
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0, 190, 0, 42)
+button.Position = UDim2.new(0.5, -95, 1, -52)
+button.Text = "COPY RESULTS"
+button.TextSize = 15
+button.Font = Enum.Font.GothamBold
+button.TextColor3 = Color3.new(1, 1, 1)
+button.Parent = frame
 
 local buttonCorner = Instance.new("UICorner")
 buttonCorner.CornerRadius = UDim.new(0, 8)
-buttonCorner.Parent = copyButton
+buttonCorner.Parent = button
 
-copyButton.Activated:Connect(function()
+button.Activated:Connect(function()
 
-    local finalText = table.concat(results, "\n")
+    local text = table.concat(results, "\n")
+    local success = false
 
-    local copied = false
-
-    -- Executor clipboard support
     if typeof(setclipboard) == "function" then
-        copied = pcall(function()
-            setclipboard(finalText)
+
+        success = pcall(function()
+            setclipboard(text)
         end)
+
     elseif typeof(toclipboard) == "function" then
-        copied = pcall(function()
-            toclipboard(finalText)
+
+        success = pcall(function()
+            toclipboard(text)
         end)
     end
 
-    if copied then
-        copyButton.Text = "COPIED!"
+    if success then
+        button.Text = "COPIED!"
         task.wait(1.5)
-        copyButton.Text = "COPY RESULTS"
+        button.Text = "COPY RESULTS"
     else
-        copyButton.Text = "COPY NOT SUPPORTED"
+        button.Text = "CLIPBOARD UNSUPPORTED"
         task.wait(1.5)
-        copyButton.Text = "COPY RESULTS"
+        button.Text = "COPY RESULTS"
     end
 end)
-
-print("")
-print("========== SCAN COMPLETE ==========")
-print("TOTAL EGGS:", count)
-print("Use the COPY RESULTS button to copy everything.")
